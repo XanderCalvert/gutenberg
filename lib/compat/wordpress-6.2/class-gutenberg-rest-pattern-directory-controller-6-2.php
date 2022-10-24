@@ -219,7 +219,6 @@ class Gutenberg_REST_Pattern_Directory_Controller_6_2 extends Gutenberg_REST_Pat
 
 		if ( is_wp_error( $raw_patterns ) ) {
 			$raw_patterns->add_data( array( 'status' => 500 ) );
-
 			return $raw_patterns;
 		}
 
