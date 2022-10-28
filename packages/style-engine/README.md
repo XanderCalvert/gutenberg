@@ -86,7 +86,7 @@ array(
 */
 ```
 
-The default block style support can be extended by passing metadata in the options.
+The default block style support definitions can be extended by passing metadata in the options. 
 
 ```php
 $block_attributes =  array(
@@ -120,6 +120,8 @@ array(
 )
 */
 ```
+
+Note: CSS properties must be supported by [safecss_filter_attr](https://developer.wordpress.org/reference/functions/safecss_filter_attr/), otherwise you can allow non-supported CSS using the filter [safecss_filter_attr_allow_css](https://developer.wordpress.org/reference/hooks/safecss_filter_attr_allow_css/).
 
 ### wp_style_engine_get_stylesheet_from_css_rules()
 
