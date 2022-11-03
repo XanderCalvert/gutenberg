@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import deprecated from '@wordpress/deprecated';
@@ -8,7 +13,7 @@ import deprecated from '@wordpress/deprecated';
  */
 import BlockIcon from '../block-icon';
 
-function BlockCard( { title, icon, description, blockType } ) {
+function BlockCard( { title, icon, description, isSynced, blockType } ) {
 	if ( blockType ) {
 		deprecated( '`blockType` property in `BlockCard component`', {
 			since: '5.7',
@@ -16,8 +21,13 @@ function BlockCard( { title, icon, description, blockType } ) {
 		} );
 		( { title, icon, description } = blockType );
 	}
+
 	return (
-		<div className="block-editor-block-card">
+		<div
+			className={ classnames( 'block-editor-block-card', {
+				'is-synced': isSynced,
+			} ) }
+		>
 			<BlockIcon icon={ icon } showColors />
 			<div className="block-editor-block-card__content">
 				<h2 className="block-editor-block-card__title">{ title }</h2>
