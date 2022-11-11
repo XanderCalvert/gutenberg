@@ -176,6 +176,7 @@ async function runTestSuite( testSuite, performanceTestDirectory ) {
  */
 async function runPerformanceTests( branches, options ) {
 	const runningInCI = !! process.env.CI || !! options.ci;
+	const localCloneAt = process.env.GITHUB_WORKSPACE;
 
 	// The default value doesn't work because commander provides an array.
 	if ( branches.length === 0 ) {
@@ -208,6 +209,10 @@ async function runPerformanceTests( branches, options ) {
 	const baseDirectory = getRandomTemporaryPath();
 	fs.mkdirSync( baseDirectory, { recursive: true } );
 
+	if ( localCloneAt ) {
+		runShellScript( `cp -R ${ localCloneAt } ${ baseDirectory }` );
+	}
+
 	// @ts-ignore
 	const git = SimpleGit( baseDirectory );
 	await git
@@ -215,7 +220,11 @@ async function runPerformanceTests( branches, options ) {
 		.raw( 'remote', 'add', 'origin', config.gitRepositoryURL );
 
 	for ( const branch of branches ) {
-		await git.raw( 'fetch', '--depth=1', 'origin', branch );
+		try {
+			await git.checkout( branch );
+		} catch ( e ) {
+			await git.raw( 'fetch', '--depth=1', 'origin', branch );
+		}
 	}
 
 	await git.raw( 'checkout', branches[ 0 ] );
@@ -232,9 +241,15 @@ async function runPerformanceTests( branches, options ) {
 		log( `    >> Fetching the test-runner branch: ${ branchName }` );
 
 		// @ts-ignore
-		await SimpleGit( performanceTestDirectory )
-			.raw( 'fetch', '--depth=1', 'origin', options.testsBranch )
-			.raw( 'checkout', options.testsBranch );
+		const testsGit = SimpleGit( performanceTestDirectory );
+
+		try {
+			await testsGit.checkout( options.testsBranch );
+		} catch ( e ) {
+			await testsGit
+				.raw( 'fetch', '--depth=1', 'origin', options.testsBranch )
+				.raw( 'checkout', options.testsBranch );
+		}
 	}
 
 	log( '    >> Installing dependencies and building packages' );
