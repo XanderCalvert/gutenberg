@@ -95,6 +95,10 @@ program
 	.alias( 'perf' )
 	.option( ...ciOption )
 	.option(
+		'--test-merge <ref>',
+		'Compare the performance of this commit against its first parent.'
+	)
+	.option(
 		'--tests-branch <branch>',
 		"Use this branch's performance test files"
 	)

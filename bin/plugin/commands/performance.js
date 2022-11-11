@@ -22,6 +22,7 @@ const config = require( '../config' );
  * @typedef WPPerformanceCommandOptions
  *
  * @property {boolean=} ci          Run on CI.
+ * @property {string=}  testMerge   Compare the performance of this commit against its first parent.
  * @property {string=}  testsBranch The branch whose performance test files will be used for testing.
  * @property {string=}  wpVersion   The WordPress version to be used as the base install for testing.
  */
@@ -177,6 +178,7 @@ async function runTestSuite( testSuite, performanceTestDirectory ) {
 async function runPerformanceTests( branches, options ) {
 	const runningInCI = !! process.env.CI || !! options.ci;
 	const localCloneAt = process.env.GITHUB_WORKSPACE;
+	const testMergeCommit = options.testMerge;
 
 	// The default value doesn't work because commander provides an array.
 	if ( branches.length === 0 ) {
@@ -202,7 +204,7 @@ async function runPerformanceTests( branches, options ) {
 	 * @type {string[]} git refs against which to run tests;
 	 *                  could be commit SHA, branch name, tag, etc...
 	 */
-	if ( branches.length < 2 ) {
+	if ( ! testMergeCommit && branches.length < 2 ) {
 		throw new Error( `Need at least two git refs to run` );
 	}
 
@@ -223,6 +225,20 @@ async function runPerformanceTests( branches, options ) {
 	await git
 		.raw( 'init' )
 		.raw( 'remote', 'add', 'origin', config.gitRepositoryURL );
+
+	if ( testMergeCommit ) {
+		try {
+			await git.checkout( testMergeCommit );
+		} catch ( e ) {
+			await git.raw( 'fetch', '--depth=2', 'origin', testMergeCommit );
+		}
+
+		const parentCommit = (
+			await git.raw( 'rev-parse', `${ testMergeCommit }~1` )
+		 ).trim();
+
+		branches = [ testMergeCommit, parentCommit ];
+	}
 
 	for ( const branch of branches ) {
 		try {
