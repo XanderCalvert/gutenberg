@@ -18,7 +18,7 @@ const {
 } = require( '../lib/utils' );
 const config = require( '../config' );
 
-const TEST_ITERATIONS = 1;
+const TEST_ITERATIONS = 30;
 
 /**
  * @typedef WPPerformanceCommandOptions
