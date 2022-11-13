@@ -18,6 +18,8 @@ const {
 } = require( '../lib/utils' );
 const config = require( '../config' );
 
+const TEST_ITERATIONS = 1;
+
 /**
  * @typedef WPPerformanceCommandOptions
  *
@@ -330,7 +332,7 @@ async function runPerformanceTests( branches, options ) {
 		/** @type {Array<Record<string, WPPerformanceResults>>} */
 		const rawResults = [];
 		// Alternate three times between branches.
-		for ( let i = 0; i < 3; i++ ) {
+		for ( let i = 0; i < TEST_ITERATIONS; i++ ) {
 			rawResults[ i ] = {};
 			for ( const branch of branches ) {
 				// @ts-ignore
@@ -430,6 +432,12 @@ async function runPerformanceTests( branches, options ) {
 
 	log(
 		'\nPlease note that client side metrics EXCLUDE the server response time.\n'
+	);
+
+	fs.writeFileSync(
+		'/home/runner/perf-test-results.json',
+		JSON.stringify( results, null, 2 ),
+		'utf8'
 	);
 
 	for ( const testSuite of testSuites ) {
