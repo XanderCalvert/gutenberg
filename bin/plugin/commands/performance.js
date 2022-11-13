@@ -327,6 +327,20 @@ async function runPerformanceTests( branches, options ) {
 
 	/** @type {Record<string,Record<string, WPPerformanceResults>>} */
 	const results = {};
+	const allResults = testSuites.reduce(
+		( suiteResults, suite ) => (
+			// @ts-ignore
+			( suiteResults[ suite ] = branches.reduce(
+				( branchResults, branch ) => (
+					// @ts-ignore
+					( branchResults[ branch ] = [] ), branchResults
+				),
+				{}
+			) ),
+			suiteResults
+		),
+		{}
+	);
 	for ( const testSuite of testSuites ) {
 		results[ testSuite ] = {};
 		/** @type {Array<Record<string, WPPerformanceResults>>} */
@@ -348,6 +362,8 @@ async function runPerformanceTests( branches, options ) {
 					testSuite,
 					performanceTestDirectory
 				);
+				// @ts-ignore
+				allResults[ testSuite ][ branch ] = rawResults[ i ][ branch ];
 				log( '        >> Stopping the environment' );
 				await runShellScript(
 					'../../tests/node_modules/.bin/wp-env stop',
@@ -436,7 +452,7 @@ async function runPerformanceTests( branches, options ) {
 
 	fs.writeFileSync(
 		'/home/runner/perf-test-results.json',
-		JSON.stringify( rawResults, null, 2 ),
+		JSON.stringify( allResults, null, 2 ),
 		'utf8'
 	);
 
