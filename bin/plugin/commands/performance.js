@@ -363,7 +363,9 @@ async function runPerformanceTests( branches, options ) {
 					performanceTestDirectory
 				);
 				// @ts-ignore
-				allResults[ testSuite ][ branch ] = rawResults[ i ][ branch ];
+				allResults[ testSuite ][ branch ].push(
+					rawResults[ i ][ branch ]
+				);
 				log( '        >> Stopping the environment' );
 				await runShellScript(
 					'../../tests/node_modules/.bin/wp-env stop',
