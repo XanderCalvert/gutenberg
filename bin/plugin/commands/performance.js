@@ -18,7 +18,26 @@ const {
 } = require( '../lib/utils' );
 const config = require( '../config' );
 
-const TEST_ITERATIONS = 30;
+const TEST_ITERATIONS = 1;
+const RESULTS_FILE =
+	process.env.CI &&
+	process.env.HOME &&
+	path.join( process.env.HOME, 'perf-tests-raw-data.csv' );
+
+const rawMetricNames = [
+	'serverResponse',
+	'firstPaint',
+	'domContentLoaded',
+	'loaded',
+	'firstContentfulPaint',
+	'firstBlock',
+	'type',
+	'focus',
+	'listViewOpen',
+	'inserterOpen',
+	'inserterHover',
+	'inserterSearch',
+];
 
 /**
  * @typedef WPPerformanceCommandOptions
@@ -152,11 +171,12 @@ function curateResults( results ) {
  * Runs the performance tests on the current branch.
  *
  * @param {string} testSuite                Name of the tests set.
+ * @param {string} branchName               Name of the branch under test.
  * @param {string} performanceTestDirectory Path to the performance tests' clone.
  *
  * @return {Promise<WPPerformanceResults>} Performance results for the branch.
  */
-async function runTestSuite( testSuite, performanceTestDirectory ) {
+async function runTestSuite( testSuite, branchName, performanceTestDirectory ) {
 	await runShellScript(
 		`npm run test:performance -- packages/e2e-tests/specs/performance/${ testSuite }.test.js`,
 		performanceTestDirectory
@@ -167,6 +187,27 @@ async function runTestSuite( testSuite, performanceTestDirectory ) {
 			`packages/e2e-tests/specs/performance/${ testSuite }.test.results.json`
 		)
 	);
+
+	if ( RESULTS_FILE ) {
+		const maxMeasurements = rawMetricNames.reduce(
+			( max, metricName ) =>
+				Math.max( max, rawResults[ metricName ].length ),
+			0
+		);
+
+		let output = '';
+		for ( let i = 0; i < maxMeasurements; i++ ) {
+			const measurements = rawMetricNames
+				.map( ( name ) => rawResults[ name ][ i ] )
+				.join( ',' );
+
+			output += `${ testSuite },${ branchName },${ measurements }`;
+		}
+
+		// we do not need to wait for this to finish
+		fs.appendFile( RESULTS_FILE, output, () => {} );
+	}
+
 	return curateResults( rawResults );
 }
 
@@ -360,6 +401,7 @@ async function runPerformanceTests( branches, options ) {
 				log( '        >> Running the test.' );
 				rawResults[ i ][ branch ] = await runTestSuite(
 					testSuite,
+					branch,
 					performanceTestDirectory
 				);
 				// @ts-ignore
@@ -452,6 +494,7 @@ async function runPerformanceTests( branches, options ) {
 		'\nPlease note that client side metrics EXCLUDE the server response time.\n'
 	);
 
+	// Export raw data for external analysis.
 	fs.writeFileSync(
 		'/home/runner/perf-test-results.json',
 		JSON.stringify( allResults, null, 2 ),
