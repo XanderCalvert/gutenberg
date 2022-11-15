@@ -95,8 +95,8 @@ program
 	.alias( 'perf' )
 	.option( ...ciOption )
 	.option(
-		'--tests-branch <branch>',
-		"Use this branch's performance test files"
+		'--tests-branch <rev>',
+		"Use this revision's performance test files"
 	)
 	.option(
 		'--wp-version <version>',
