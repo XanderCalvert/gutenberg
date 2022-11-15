@@ -222,6 +222,14 @@ class WP_HTML_Tag_Processor {
 	private $sought_match_offset;
 
 	/**
+	 * Whether to visit tag closers, e.g. </div>, when walking an input document.
+	 *
+	 * @since 6.2.0
+	 * @var boolean
+	 */
+	private $stop_on_tag_closers;
+
+	/**
 	 * The updated HTML document.
 	 *
 	 * @since 6.2.0
@@ -275,6 +283,29 @@ class WP_HTML_Tag_Processor {
 	 * @var ?int
 	 */
 	private $tag_name_length;
+
+	/**
+	 * Byte offset in input document where current tag token ends.
+	 *
+	 * Example:
+	 * ```
+	 *   <div id="test">...
+	 *   0         1   |
+	 *   01234567890123456
+	 *    --- tag name ends at 14
+	 * ```
+	 *
+	 * @since 6.2.0
+	 * @var ?int
+	 */
+	private $tag_ends_at;
+
+	/**
+	 * Whether the current tag is an opening tag, e.g. <div>, or a closing tag, e.g. </div>.
+	 *
+	 * @var boolean
+	 */
+	private $is_closing_tag;
 
 	/**
 	 * Lazily-built index of attributes found within an HTML tag, keyed by the attribute name.
@@ -408,7 +439,16 @@ class WP_HTML_Tag_Processor {
 				return false;
 			}
 
-			$this->parse_tag_opener_attributes();
+			while ( $this->parse_next_attribute() ) {
+				continue;
+			}
+
+			$tag_ends_at = strpos( $this->html, '>', $this->parsed_bytes );
+			if ( false === $tag_ends_at ) {
+				return false;
+			}
+			$this->tag_ends_at  = $tag_ends_at;
+			$this->parsed_bytes = $tag_ends_at;
 
 			if ( $this->matches() ) {
 				++$already_found;
@@ -486,7 +526,9 @@ class WP_HTML_Tag_Processor {
 				continue;
 			}
 
-			$this->skip_tag_closer_attributes();
+			while ( $this->parse_next_attribute() ) {
+				continue;
+			}
 			$at = $this->parsed_bytes;
 
 			if ( '>' === $html[ $at ] || '/' === $html[ $at ] ) {
@@ -605,7 +647,9 @@ class WP_HTML_Tag_Processor {
 
 			if ( $is_closing ) {
 				$this->parsed_bytes = $at;
-				$this->skip_tag_closer_attributes();
+				while ( $this->parse_next_attribute() ) {
+					continue;
+				}
 
 				if ( '>' === $html[ $this->parsed_bytes ] ) {
 					++$this->parsed_bytes;
@@ -635,6 +679,13 @@ class WP_HTML_Tag_Processor {
 			$at = strpos( $html, '<', $at );
 			if ( false === $at ) {
 				return false;
+			}
+
+			if ( '/' === $this->html[ $at + 1 ] ) {
+				$this->is_closing_tag = true;
+				$at++;
+			} else {
+				$this->is_closing_tag = false;
 			}
 
 			/*
@@ -752,34 +803,12 @@ class WP_HTML_Tag_Processor {
 	}
 
 	/**
-	 * Parses all attributes of the current tag.
-	 *
-	 * @since 6.2.0
-	 */
-	private function parse_tag_opener_attributes() {
-		while ( $this->parse_next_attribute() ) {
-			continue;
-		}
-	}
-
-	/**
-	 * Skips all attributes of the current tag.
-	 *
-	 * @since 6.2.0
-	 */
-	private function skip_tag_closer_attributes() {
-		while ( $this->parse_next_attribute( 'tag-closer' ) ) {
-			continue;
-		}
-	}
-
-	/**
 	 * Parses the next attribute.
 	 *
 	 * @param string $context tag-opener or tag-closer.
 	 * @since 6.2.0
 	 */
-	private function parse_next_attribute( $context = 'tag-opener' ) {
+	private function parse_next_attribute() {
 		// Skip whitespace and slashes.
 		$this->parsed_bytes += strspn( $this->html, " \t\f\r\n/", $this->parsed_bytes );
 
@@ -830,7 +859,7 @@ class WP_HTML_Tag_Processor {
 			$attribute_end = $attribute_start + $name_length;
 		}
 
-		if ( 'tag-opener' !== $context ) {
+		if ( $this->is_closing_tag ) {
 			return true;
 		}
 
@@ -872,6 +901,8 @@ class WP_HTML_Tag_Processor {
 		$this->apply_attributes_updates();
 		$this->tag_name_starts_at = null;
 		$this->tag_name_length    = null;
+		$this->tag_ends_at        = null;
+		$this->is_closing_tag     = null;
 		$this->attributes         = array();
 	}
 
@@ -1118,6 +1149,25 @@ class WP_HTML_Tag_Processor {
 	}
 
 	/**
+	 * Indicates if the current tag token is a tag closer.
+	 *
+	 * Example:
+	 * <code>
+	 *     $p = new WP_HTML_Tag_Processor( '<div></div>' );
+	 *     $p->next_tag( [ 'tag_name' => 'div', 'tag_closers' => 'visit' ] );
+	 *     $p->is_tag_closer() === false;
+	 *
+	 *     $p->next_tag( [ 'tag_name' => 'div', 'tag_closers' => 'visit' ] );
+	 *     $p->iss_tag_closer() === true;
+	 * </code>
+	 *
+	 * @return bool
+	 */
+	public function is_tag_closer() {
+		return $this->is_closing_tag;
+	}
+
+	/**
 	 * Updates or creates a new attribute on the currently matched tag with the value passed.
 	 *
 	 * For boolean attributes special handling is provided:
@@ -1133,7 +1183,7 @@ class WP_HTML_Tag_Processor {
 	 * @throws Exception When WP_DEBUG is true and the attribute name is invalid.
 	 */
 	public function set_attribute( $name, $value ) {
-		if ( null === $this->tag_name_starts_at ) {
+		if ( $this->is_closing_tag || null === $this->tag_name_starts_at ) {
 			return;
 		}
 
@@ -1244,7 +1294,7 @@ class WP_HTML_Tag_Processor {
 	 * @param string $name The attribute name to remove.
 	 */
 	public function remove_attribute( $name ) {
-		if ( ! isset( $this->attributes[ $name ] ) ) {
+		if ( $this->is_closing_tag || ! isset( $this->attributes[ $name ] ) ) {
 			return;
 		}
 
@@ -1274,6 +1324,10 @@ class WP_HTML_Tag_Processor {
 	 * @param string $class_name The class name to add.
 	 */
 	public function add_class( $class_name ) {
+		if ( $this->is_closing_tag ) {
+			return false;
+		}
+
 		if ( null !== $this->tag_name_starts_at ) {
 			$this->classname_updates[ $class_name ] = self::ADD_CLASS;
 		}
@@ -1287,6 +1341,10 @@ class WP_HTML_Tag_Processor {
 	 * @param string $class_name The class name to remove.
 	 */
 	public function remove_class( $class_name ) {
+		if ( $this->is_closing_tag ) {
+			return false;
+		}
+
 		if ( null !== $this->tag_name_starts_at ) {
 			$this->classname_updates[ $class_name ] = self::REMOVE_CLASS;
 		}
@@ -1350,7 +1408,9 @@ class WP_HTML_Tag_Processor {
 
 		// Parse the attributes in the updated markup.
 		$this->attributes = array();
-		$this->parse_tag_opener_attributes();
+		while ( $this->parse_next_attribute() ) {
+			continue;
+		}
 
 		return $this->html;
 	}
@@ -1365,6 +1425,7 @@ class WP_HTML_Tag_Processor {
 	 *
 	 *     @type string|null $tag_name     Which tag to find, or `null` for "any tag."
 	 *     @type string|null $class_name   Tag must contain this class name to match.
+	 *     @type string      $tag_closers  "visit" or "skip": whether to stop on tag closers, e.g. </div>.
 	 * }
 	 */
 	private function parse_query( $query ) {
@@ -1376,6 +1437,7 @@ class WP_HTML_Tag_Processor {
 		$this->sought_tag_name     = null;
 		$this->sought_class_name   = null;
 		$this->sought_match_offset = 1;
+		$this->stop_on_tag_closers = false;
 
 		// A single string value means "find the tag of this name".
 		if ( is_string( $query ) ) {
@@ -1399,6 +1461,10 @@ class WP_HTML_Tag_Processor {
 		if ( isset( $query['match_offset'] ) && is_int( $query['match_offset'] ) && 0 < $query['match_offset'] ) {
 			$this->sought_match_offset = $query['match_offset'];
 		}
+
+		if ( isset( $query['tag_closers' ] ) ) {
+			$this->stop_on_tag_closers = $query['tag_closers'] === 'visit';
+		}
 	}
 
 
@@ -1410,6 +1476,10 @@ class WP_HTML_Tag_Processor {
 	 * @return boolean
 	 */
 	private function matches() {
+		if ( $this->is_closing_tag && ! $this->stop_on_tag_closers ) {
+			return false;
+		}
+
 		// Do we match a case-insensitive HTML tag name?
 		if ( null !== $this->sought_tag_name ) {
 			/*
